@@ -1,0 +1,25 @@
+stock_list:
+  api:
+    url: "https://wifeed.vn/api/thong-tin-co-phieu/danh-sach-ma-chung-khoan"
+    exchanges:
+      - "HOSE"
+      - "HNX"
+      - "UPCOM"
+    timeout: 30
+
+  db:
+    postgres_conn_id: "vn_portfolio_db"
+    table: "raw_vn_stock_data.stock_list"
+    conflict_keys:
+      - "code"
+
+    # mapping json_key (trong API) -> column (trong DB)
+    columns:
+      - json_key: "code"
+        column: "code"
+      - json_key: "fullname_vi"
+        column: "fullname_vi"
+      - json_key: "loaidn"
+        column: "loaidn"
+      - json_key: "san"
+        column: "san"
