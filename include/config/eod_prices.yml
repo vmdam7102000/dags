@@ -6,7 +6,7 @@ eod_prices:
     lookback_days: 50
 
   db:
-    postgres_conn_id: "vn_portfolio_db"
+    postgres_conn_id: "keynum-central-pg"
     stock_list_table: "raw_vn_stock_data.stock_list"
     stock_list_code_column: "code"
 

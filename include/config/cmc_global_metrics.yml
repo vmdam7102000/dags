@@ -7,7 +7,7 @@ cmc_global_metrics:
     count: 360
 
   db:
-    postgres_conn_id: "vn_portfolio_db"
+    postgres_conn_id: "keynum-central-pg"
     target_table: "raw_crypto_data.crypto_global_metrics"
     conflict_keys:
       - "timestamp"

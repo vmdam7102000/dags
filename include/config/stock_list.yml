@@ -8,7 +8,7 @@ stock_list:
     timeout: 30
 
   db:
-    postgres_conn_id: "vn_portfolio_db"
+    postgres_conn_id: "keynum-central-pg"
     table: "raw_vn_stock_data.stock_list"
     conflict_keys:
       - "code"
