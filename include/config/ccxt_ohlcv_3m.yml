@@ -1,0 +1,13 @@
+ccxt_ohlcv_3m:
+  api:
+    timeframe: "3m"
+    limit: 1000
+    since_days: 1          # lấy từ ngày hiện tại lùi lại, để trống để lấy tất cả
+    rate_limit_floor: 0.2    # giây; ngủ tối thiểu giữa các call
+
+  db:
+    postgres_conn_id: "keynum-central-pg"
+    target_table: "raw_crypto_data.ohlcv_3m"
+    metadata_table: "raw_crypto_data.coin_marketcap_top100_info"
+    checkpoint_table: "raw_crypto_data.ohlcv_checkpoint"
+    symbol_quote: "USDT"     # ghép cặp SYMBOL/quote
