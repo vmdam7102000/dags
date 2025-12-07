@@ -2,7 +2,7 @@ ccxt_ohlcv_3m:
   api:
     timeframe: "3m"
     limit: 1000
-    since_days: 1          # lấy từ ngày hiện tại lùi lại, để trống để lấy tất cả
+    since_days: 3000          # lấy từ ngày hiện tại lùi lại, để trống để lấy tất cả
     rate_limit_floor: 0.2    # giây; ngủ tối thiểu giữa các call
 
   db:
