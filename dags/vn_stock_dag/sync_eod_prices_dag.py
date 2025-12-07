@@ -12,9 +12,9 @@ from airflow.operators.python import get_current_context
 from airflow.models import Variable
 from airflow.providers.postgres.hooks.postgres import PostgresHook
 
-from vn_stock_data.api_utils import request_json
-from vn_stock_data.config_loader import load_yaml_config
-from vn_stock_data.db_utils import get_all_stock_codes, insert_dynamic_records
+from plugins.utils.api_utils import request_json
+from plugins.utils.config_loader import load_yaml_config
+from plugins.utils.db_utils import get_all_stock_codes, insert_dynamic_records
 
 CONFIG = load_yaml_config("eod_prices.yml")["eod_prices"]
 API_CFG = CONFIG["api"]

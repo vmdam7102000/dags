@@ -12,7 +12,7 @@ from airflow.decorators import task
 from airflow.providers.postgres.hooks.postgres import PostgresHook
 from psycopg2.extras import execute_values
 
-from vn_stock_data.config_loader import load_yaml_config
+from plugins.utils.config_loader import load_yaml_config
 
 CONFIG = load_yaml_config("ccxt_ohlcv_3m.yml")["ccxt_ohlcv_3m"]
 API_CFG = CONFIG["api"]

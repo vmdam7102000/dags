@@ -1,7 +1,7 @@
-# vn_stock_data/db_utils.py
+# plugins/utils/db_utils.py
 from __future__ import annotations
 
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Sequence
 
 from psycopg2.extensions import connection as PGConnection
 
@@ -14,7 +14,7 @@ def get_all_stock_codes(
     code_column: str = "code",
 ) -> List[str]:
     """
-    Lấy danh sách mã cổ phiếu từ bảng stock_list.
+    Fetch all stock codes from the configured stock list table.
     """
     hook = PostgresHook(postgres_conn_id=postgres_conn_id)
     conn = hook.get_conn()
@@ -31,24 +31,17 @@ def insert_dynamic_records(
     postgres_conn_id: str,
     table: str,
     records: List[Dict[str, Any]],
-    columns_map: List[Dict[str, str]],
-    conflict_keys: List[str],
+    columns_map: Sequence[Dict[str, str]],
+    conflict_keys: Sequence[str],
     on_conflict_do_update: bool = False,
     conn: Optional[PGConnection] = None,
 ) -> None:
     """
-    Insert records vào Postgres theo mapping JSON->column trong YAML.
-
-    columns_map: list dict {"json_key": ..., "column": ...}
-    conflict_keys: danh sách cột dùng cho ON CONFLICT
-    on_conflict_do_update:
-        - False: ON CONFLICT DO NOTHING
-        - True:  ON CONFLICT DO UPDATE SET col = EXCLUDED.col
+    Insert multiple records into Postgres following a YAML-defined mapping.
     """
     if not records:
         return
 
-    # Build danh sách cột & json key tương ứng
     db_columns = [c["column"] for c in columns_map]
     json_keys = [c["json_key"] for c in columns_map]
 
@@ -82,5 +75,5 @@ def insert_dynamic_records(
         conn.commit()
     finally:
         cursor.close()
-        if managed_conn:
+        if managed_conn and conn:
             conn.close()
