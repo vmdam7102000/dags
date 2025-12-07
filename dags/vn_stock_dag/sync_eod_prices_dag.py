@@ -92,7 +92,7 @@ with DAG(
     dag_id="sync_eod_prices",
     description="Sync EOD stock prices from Wifeed API to Postgres (YAML mapping)",
     default_args={
-        "owner": "data-team",
+        "owner": "vn-stock-data",
         "depends_on_past": False,
         "retries": 2,
         "retry_delay": timedelta(minutes=5),

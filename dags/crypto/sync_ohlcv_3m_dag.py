@@ -181,7 +181,7 @@ with DAG(
     dag_id="sync_ohlcv_3m",
     description="Sync OHLCV 3m from CCXT into Postgres (incremental)",
     default_args={
-        "owner": "data-team",
+        "owner": "crypto-data",
         "depends_on_past": False,
         "retries": 2,
         "retry_delay": timedelta(minutes=5),

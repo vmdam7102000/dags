@@ -82,7 +82,7 @@ with DAG(
     dag_id="cmc_global_metrics",
     description="Sync CoinMarketCap global metrics historical quotes",
     default_args={
-        "owner": "data-team",
+        "owner": "crypto-data",
         "depends_on_past": False,
         "retries": 2,
         "retry_delay": timedelta(minutes=5),

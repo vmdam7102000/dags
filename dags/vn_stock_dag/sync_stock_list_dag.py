@@ -37,7 +37,7 @@ with DAG(
     dag_id="sync_stock_list",
     description="Sync stock list from Wifeed API to Postgres (YAML mapping)",
     default_args={
-        "owner": "data-team",
+        "owner": "vn-stock-data",
         "depends_on_past": False,
         "retries": 2,
         "retry_delay": timedelta(minutes=5),

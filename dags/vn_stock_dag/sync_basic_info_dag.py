@@ -76,7 +76,7 @@ with DAG(
     dag_id="sync_stock_basic_info",
     description="Sync stock basic info from API to Postgres",
     default_args={
-        "owner": "data-team",
+        "owner": "vn-stock-data",
         "depends_on_past": False,
         "retries": 2,
         "retry_delay": timedelta(minutes=5),
