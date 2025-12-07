@@ -1,4 +1,4 @@
-# dags/crypto/sync_ohlcv_3m_dag.py
+# dags/crypto/sync_crypto_ohlcv_3m_dag_dag.py
 from __future__ import annotations
 
 import asyncio
@@ -178,7 +178,7 @@ async def fetch_for_pair(exchange_id: str, symbol: str, since_ms: Optional[int])
 
 
 with DAG(
-    dag_id="sync_ohlcv_3m",
+    dag_id="sync_crypto_ohlcv_3m_dag",
     description="Sync OHLCV 3m from CCXT into Postgres (incremental)",
     default_args={
         "owner": "crypto-data",

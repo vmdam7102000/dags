@@ -19,13 +19,13 @@ from plugins.utils.db_utils import get_all_stock_codes, insert_dynamic_records
 CONFIG = load_yaml_config("eod_prices.yml")["eod_prices"]
 API_CFG = CONFIG["api"]
 DB_CFG = CONFIG["db"]
-CHUNK_SIZE = 400  # giữ số batch < core.max_map_length
+CHUNK_SIZE = 400  # keep number of batches under core.max_map_length
 API_KEY = Variable.get(API_CFG["api_key_var"], default_var="")
 
 
 def _build_date_range(execution_date: datetime) -> Dict[str, str]:
     """
-    Tính from-date và to-date dựa trên execution_date & lookback_days.
+    Compute from-date and to-date based on execution_date & lookback_days.
     """
     lookback_days = API_CFG.get("lookback_days", 50)
     to_date = execution_date.date()
@@ -38,7 +38,7 @@ def _build_date_range(execution_date: datetime) -> Dict[str, str]:
 
 def _sync_one(code: str, logical_date: datetime, conn) -> None:
     """
-    Fetch & insert EOD cho 1 mã trong khoảng lookback_days ngày.
+    Fetch and insert EOD data for a single code within the lookback window.
     """
     date_range = _build_date_range(logical_date)
 
@@ -84,12 +84,12 @@ def _sync_one(code: str, logical_date: datetime, conn) -> None:
         DB_CFG["price_table"],
     )
 
-    # hạn chế spam API (tuỳ bạn dùng / bỏ)
+    # Basic throttle to avoid hitting the API too aggressively
     time.sleep(1)
 
 
 with DAG(
-    dag_id="sync_eod_prices",
+    dag_id="sync_eod_vn_stock_prices_dag",
     description="Sync EOD stock prices from Wifeed API to Postgres (YAML mapping)",
     default_args={
         "owner": "vn-stock-data",

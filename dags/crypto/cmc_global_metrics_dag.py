@@ -1,4 +1,4 @@
-# dags/crypto/cmc_global_metrics_dag.py
+# dags/crypto/sync_cmc_global_metrics_dag_dag.py
 from __future__ import annotations
 
 import logging
@@ -14,7 +14,7 @@ from plugins.utils.api_utils import request_json
 from plugins.utils.config_loader import load_yaml_config
 from plugins.utils.db_utils import insert_dynamic_records
 
-CONFIG = load_yaml_config("cmc_global_metrics.yml")["cmc_global_metrics"]
+CONFIG = load_yaml_config("cmc_global_metrics.yml")["sync_cmc_global_metrics_dag"]
 API_CFG = CONFIG["api"]
 DB_CFG = CONFIG["db"]
 API_KEY = Variable.get(API_CFG["api_key_var"], default_var="")
@@ -79,7 +79,7 @@ def _normalize_quote(entry: Dict[str, Any]) -> Optional[Dict[str, Any]]:
 
 
 with DAG(
-    dag_id="cmc_global_metrics",
+    dag_id="sync_cmc_global_metrics_dag",
     description="Sync CoinMarketCap global metrics historical quotes",
     default_args={
         "owner": "crypto-data",
@@ -135,7 +135,7 @@ with DAG(
             if record:
                 records.append(record)
 
-        logging.info("Transformed %s records for cmc_global_metrics", len(records))
+        logging.info("Transformed %s records for sync_cmc_global_metrics_dag", len(records))
         return records
 
     @task

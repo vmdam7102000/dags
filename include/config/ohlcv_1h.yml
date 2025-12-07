@@ -1,0 +1,11 @@
+ohlcv_1h:
+  db:
+    postgres_conn_id: "keynum-central-pg"
+    source_table: "raw_crypto_data.ohlcv_3m"
+    target_table: "raw_crypto_data.ohlcv_1h"
+    symbol_quote: "USDT"
+    conflict_keys: ["symbol", "exchange", "timestamp"]
+    lookback_days: 7
+    batch_days: 7
+    bucket_minutes: 60
+  schedule: "5 * * * *"

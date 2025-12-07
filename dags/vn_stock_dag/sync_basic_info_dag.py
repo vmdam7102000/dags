@@ -25,7 +25,7 @@ API_KEY = Variable.get(API_CFG["api_key_var"], default_var="")
 
 def _normalize_record(rec: Dict[str, Any]) -> Dict[str, Any]:
     """
-    Chuẩn hóa record trước khi insert: json.dumps cho trường donvikiemtoan nếu không phải string.
+    Normalize each record before insert: json.dumps donvikiemtoan if it is not already a string.
     """
     normalized = dict(rec)
     dvkt = normalized.get("donvikiemtoan")

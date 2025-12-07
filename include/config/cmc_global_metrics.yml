@@ -1,4 +1,4 @@
-cmc_global_metrics:
+sync_cmc_global_metrics_dag:
   api:
     url: "https://pro-api.coinmarketcap.com/v1/global-metrics/quotes/historical"
     api_key_var: "cmc_api_key"

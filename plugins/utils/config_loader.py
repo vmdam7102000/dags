@@ -12,9 +12,9 @@ def load_yaml_config(relative_path: str) -> Dict[str, Any]:
     """
     Load a YAML config file from the project include/config folder.
 
-    relative_path: path tương đối từ include/config, ví dụ: "stock_list.yml"
+    relative_path: relative path under include/config, e.g. "stock_list.yml"
     """
-    # Giả định: file này nằm trong plugins/utils, ta đi lên 2 levels tới project root
+    # This file lives under plugins/utils, so go up two levels to reach project root
     base_dir = Path(__file__).resolve().parents[2]
     config_path = base_dir / "include" / "config" / relative_path
 
