@@ -73,7 +73,7 @@ def _sync_one(code: str, logical_date: datetime, conn) -> None:
         records=records,
         columns_map=DB_CFG["columns"],
         conflict_keys=DB_CFG["conflict_keys"],
-        on_conflict_do_update=False,
+        on_conflict_do_update=True,
         conn=conn,
     )
 
