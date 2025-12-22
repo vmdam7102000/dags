@@ -97,7 +97,7 @@ with DAG(
         "retries": 2,
         "retry_delay": timedelta(minutes=5),
     },
-    schedule_interval="0 2 * * *",  # daily at 02:00
+    schedule_interval="0 3 * * *",  # daily at 02:00
     start_date=datetime(2024, 1, 1),
     catchup=False,
     max_active_runs=1,
