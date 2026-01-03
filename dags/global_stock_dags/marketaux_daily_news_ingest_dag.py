@@ -14,8 +14,8 @@ from airflow.decorators import task
 from airflow.models import Variable
 from airflow.operators.python import get_current_context
 from airflow.providers.postgres.hooks.postgres import PostgresHook
-from pymongo import MongoClient, UpdateOne
-from pymongo.errors import BulkWriteError
+# from pymongo import MongoClient, UpdateOne
+# from pymongo.errors import BulkWriteError
 
 from plugins.utils.api_utils import request_json
 from plugins.utils.config_loader import load_yaml_config
@@ -24,7 +24,7 @@ from plugins.utils.db_utils import insert_dynamic_records
 CONFIG = load_yaml_config("global_stock_configs/marketaux_news.yml")["marketaux_news"]
 API_CFG = CONFIG["api"]
 DB_CFG = CONFIG["db"]
-MONGO_CFG = CONFIG["mongo"]
+# MONGO_CFG = CONFIG["mongo"]
 
 API_KEY = Variable.get(API_CFG["api_key_var"], default_var="")
 CHUNK_SIZE = API_CFG.get("chunk_size", 50)
@@ -188,20 +188,20 @@ def _extract_source(article: Dict[str, Any]) -> Optional[str]:
     return source
 
 
-def _get_mongo_collection() -> tuple[MongoClient, Any]:
-    uri_var = MONGO_CFG.get("mongo_uri_var")
-    uri = Variable.get(uri_var, default_var="") if uri_var else ""
-    if not uri:
-        uri = MONGO_CFG.get("mongo_uri", "")
-    if not uri:
-        raise ValueError("Missing MongoDB URI configuration")
-    client = MongoClient(uri)
-    db = client[MONGO_CFG["database"]]
-    collection = db[MONGO_CFG["collection"]]
-    collection.create_index("uuid", unique=True)
-    collection.create_index([("company_ticker", 1), ("published_at", -1)])
-    collection.create_index([("company_id", 1), ("published_at", -1)])
-    return client, collection
+# def _get_mongo_collection() -> tuple[MongoClient, Any]:
+#     uri_var = MONGO_CFG.get("mongo_uri_var")
+#     uri = Variable.get(uri_var, default_var="") if uri_var else ""
+#     if not uri:
+#         uri = MONGO_CFG.get("mongo_uri", "")
+#     if not uri:
+#         raise ValueError("Missing MongoDB URI configuration")
+#     client = MongoClient(uri)
+#     db = client[MONGO_CFG["database"]]
+#     collection = db[MONGO_CFG["collection"]]
+#     collection.create_index("uuid", unique=True)
+#     collection.create_index([("company_ticker", 1), ("published_at", -1)])
+#     collection.create_index([("company_id", 1), ("published_at", -1)])
+#     return client, collection
 
 
 def _get_api_usage(conn, api_name: str, usage_date: datetime.date) -> int:
@@ -441,44 +441,44 @@ def _fetch_news_for_company(
     return list(articles.values())
 
 
-def _upsert_raw_articles(
-    collection,
-    articles: Sequence[Dict[str, Any]],
-    company_id: int,
-    ticker: Optional[str],
-    company_name: str,
-    fetched_at: datetime,
-) -> int:
-    operations: List[UpdateOne] = []
-    for article in articles:
-        uuid = _ensure_uuid(article)
-        published_at = article.get("published_at")
-        if not published_at:
-            continue
-        doc = dict(article)
-        doc.update(
-            {
-                "uuid": uuid,
-                "company_id": company_id,
-                "company_ticker": ticker,
-                "company_name": company_name,
-                "fetched_at": fetched_at,
-            }
-        )
-        operations.append(
-            UpdateOne({"uuid": uuid}, {"$setOnInsert": doc}, upsert=True)
-        )
-
-    if not operations:
-        return 0
-
-    try:
-        result = collection.bulk_write(operations, ordered=False)
-        return int(result.upserted_count or 0)
-    except BulkWriteError as exc:
-        upserted = exc.details.get("nUpserted", 0) if exc.details else 0
-        logging.warning("Bulk write had duplicate keys: %s", exc)
-        return int(upserted)
+# def _upsert_raw_articles(
+#     collection,
+#     articles: Sequence[Dict[str, Any]],
+#     company_id: int,
+#     ticker: Optional[str],
+#     company_name: str,
+#     fetched_at: datetime,
+# ) -> int:
+#     operations: List[UpdateOne] = []
+#     for article in articles:
+#         uuid = _ensure_uuid(article)
+#         published_at = article.get("published_at")
+#         if not published_at:
+#             continue
+#         doc = dict(article)
+#         doc.update(
+#             {
+#                 "uuid": uuid,
+#                 "company_id": company_id,
+#                 "company_ticker": ticker,
+#                 "company_name": company_name,
+#                 "fetched_at": fetched_at,
+#             }
+#         )
+#         operations.append(
+#             UpdateOne({"uuid": uuid}, {"$setOnInsert": doc}, upsert=True)
+#         )
+#
+#     if not operations:
+#         return 0
+#
+#     try:
+#         result = collection.bulk_write(operations, ordered=False)
+#         return int(result.upserted_count or 0)
+#     except BulkWriteError as exc:
+#         upserted = exc.details.get("nUpserted", 0) if exc.details else 0
+#         logging.warning("Bulk write had duplicate keys: %s", exc)
+#         return int(upserted)
 
 
 def _prepare_postgres_records(
@@ -558,14 +558,15 @@ def _sync_one(
         return
 
     fetched_at = datetime.utcnow()
-    inserted_raw = _upsert_raw_articles(
-        collection,
-        articles,
-        company_id,
-        ticker,
-        company_name,
-        fetched_at,
-    )
+    # inserted_raw = _upsert_raw_articles(
+    #     collection,
+    #     articles,
+    #     company_id,
+    #     ticker,
+    #     company_name,
+    #     fetched_at,
+    # )
+    inserted_raw = 0
 
     records = _prepare_postgres_records(articles, company_id, fetched_at)
     if records:
@@ -682,7 +683,9 @@ with DAG(
 
         hook = PostgresHook(postgres_conn_id=DB_CFG["postgres_conn_id"])
         conn = hook.get_conn()
-        mongo_client, collection = _get_mongo_collection()
+        # mongo_client, collection = _get_mongo_collection()
+        mongo_client = None
+        collection = None
         session = requests.Session()
 
         budget = _init_request_budget(conn, logical_date)
@@ -703,7 +706,7 @@ with DAG(
         finally:
             _increment_api_usage(conn, api_name, logical_date.date(), budget.get("count", 0))
             session.close()
-            mongo_client.close()
+            # mongo_client.close()
             conn.close()
 
     companies = get_companies()
