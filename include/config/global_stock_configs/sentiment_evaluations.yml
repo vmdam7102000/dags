@@ -1,0 +1,41 @@
+sentiment_evaluations:
+  schedule_interval: "0 8 * * *"
+
+  openrouter:
+    api_key_var: "openrouter_apikey"
+    api_url: "https://openrouter.ai/api/v1/chat/completions"
+    model_name: "google/gemini-2.5-flash-lite"
+    timeout: 60
+    retries: 3
+    backoff: 2
+    retry_statuses:
+      - 429
+      - 500
+      - 502
+      - 503
+      - 504
+    fatal_statuses:
+      - 400
+      - 401
+      - 403
+      - 404
+    response_format: null
+
+  mongo:
+    mongo_uri_var: "mongo_uri"
+    database: "financial_data"
+    collection: "news_articles_raw"
+
+  postgres:
+    postgres_conn_id: "keynum-central-pg"
+    company_table: "raw_global_stock_data.companies"
+    news_table: "raw_global_stock_data.news_articles"
+    evaluation_table: "raw_global_stock_data.sentiment_evaluations"
+
+  evaluation:
+    lookback_days: 1
+    batch_size: 10
+    max_per_company: 50
+    sleep_seconds: 1
+    positive_threshold: 60
+    negative_threshold: 40

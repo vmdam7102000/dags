@@ -1,0 +1,9 @@
+sentiment_aggregation:
+  schedule_interval: null
+
+  postgres_conn_id: "keynum-central-pg"
+  news_table: "raw_global_stock_data.news_articles"
+  evaluation_table: "raw_global_stock_data.sentiment_evaluations"
+  daily_table: "raw_global_stock_data.daily_sentiment"
+  lookback_days: 1
+  model_filter: []

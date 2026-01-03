@@ -12,7 +12,7 @@ from airflow.providers.postgres.hooks.postgres import PostgresHook
 
 from plugins.utils.config_loader import load_yaml_config
 
-CONFIG = load_yaml_config("ohlcv_1d.yml")["ohlcv_1d"]
+CONFIG = load_yaml_config("crypto_configs/ohlcv_1d.yml")["ohlcv_1d"]
 DB_CFG = CONFIG["db"]
 LOOKBACK_DAYS: int = int(DB_CFG.get("lookback_days", 90))
 BATCH_DAYS: int = max(1, int(DB_CFG.get("batch_days", 30)))

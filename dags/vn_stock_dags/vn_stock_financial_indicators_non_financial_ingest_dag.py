@@ -15,7 +15,7 @@ from plugins.utils.api_utils import request_json
 from plugins.utils.config_loader import load_yaml_config
 from plugins.utils.db_utils import get_all_stock_codes, insert_dynamic_records
 
-CONFIG = load_yaml_config("financial_indicators_non_financial.yml")[
+CONFIG = load_yaml_config("vn_stock_configs/financial_indicators_non_financial.yml")[
     "financial_indicators_non_financial"
 ]
 API_CFG = CONFIG["api"]

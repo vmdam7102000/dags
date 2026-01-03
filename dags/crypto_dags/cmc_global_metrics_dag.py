@@ -14,7 +14,7 @@ from plugins.utils.api_utils import request_json
 from plugins.utils.config_loader import load_yaml_config
 from plugins.utils.db_utils import insert_dynamic_records
 
-CONFIG = load_yaml_config("cmc_global_metrics.yml")["sync_cmc_global_metrics_dag"]
+CONFIG = load_yaml_config("crypto_configs/cmc_global_metrics.yml")["sync_cmc_global_metrics_dag"]
 API_CFG = CONFIG["api"]
 DB_CFG = CONFIG["db"]
 API_KEY = Variable.get(API_CFG["api_key_var"], default_var="")

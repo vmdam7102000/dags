@@ -13,7 +13,7 @@ from plugins.utils.api_utils import request_json
 from plugins.utils.config_loader import load_yaml_config
 from plugins.utils.db_utils import insert_dynamic_records
 
-CONFIG = load_yaml_config("stock_list.yml")["stock_list"]
+CONFIG = load_yaml_config("vn_stock_configs/stock_list.yml")["stock_list"]
 API_CFG = CONFIG["api"]
 DB_CFG = CONFIG["db"]
 

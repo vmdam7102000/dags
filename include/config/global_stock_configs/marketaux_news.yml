@@ -1,0 +1,70 @@
+marketaux_news:
+  api:
+    news_url: "https://api.marketaux.com/v1/news/all"
+    entity_search_url: "https://api.marketaux.com/v1/entity/search"
+    api_key_var: "marketaux_apikey"
+    api_key_param: "api_token"
+    pause_var: "marketaux_pause_until"
+    timeout: 30
+    retries: 3
+    backoff: 1.5
+    retry_statuses:
+      - 429
+    fatal_statuses:
+      - 402
+    throttle_seconds: 1
+    lookback_days: 365
+    request_limit: 15000
+    limit: 50
+    max_pages: 10
+    page_param: "page"
+    limit_param: "limit"
+    symbols_param: "symbols"
+    search_param: "search"
+    published_after_param: "published_after"
+    published_before_param: "published_before"
+    language: "en"
+    enable_entity_search: true
+    enable_search_fallback: true
+    max_search_terms: 2
+    chunk_size: 50
+
+  mongo:
+    mongo_uri_var: "mongo_uri"
+    database: "financial_data"
+    collection: "news_articles_raw"
+
+  db:
+    postgres_conn_id: "keynum-central-pg"
+    company_table: "raw_global_stock_data.companies"
+    company_id_column: "id"
+    company_ticker_column: "ticker"
+    company_name_column: "name"
+    company_universe_column: "universe"
+    only_active: true
+    universe: null
+    company_limit: 10
+    news_table: "raw_global_stock_data.news_articles"
+    conflict_keys:
+      - "mongo_uuid"
+    columns:
+      - json_key: "mongo_uuid"
+        column: "mongo_uuid"
+      - json_key: "company_id"
+        column: "company_id"
+      - json_key: "published_at"
+        column: "published_at"
+      - json_key: "source"
+        column: "source"
+      - json_key: "language"
+        column: "language"
+      - json_key: "title"
+        column: "title"
+      - json_key: "description"
+        column: "description"
+      - json_key: "snippet"
+        column: "snippet"
+      - json_key: "url"
+        column: "url"
+      - json_key: "fetched_at"
+        column: "fetched_at"

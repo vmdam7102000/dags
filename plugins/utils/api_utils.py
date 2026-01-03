@@ -7,7 +7,9 @@ from __future__ import annotations
 
 import logging
 import time
-from typing import Any, Dict, List, Optional, Union
+from datetime import datetime, timezone
+from email.utils import parsedate_to_datetime
+from typing import Any, Dict, List, Optional, Sequence, Union
 
 import requests
 
@@ -24,6 +26,8 @@ def request_json(
     timeout: int | float = 30,
     retries: int = 3,
     backoff: float = 1.5,
+    retry_statuses: Optional[Sequence[int]] = None,
+    fatal_statuses: Optional[Sequence[int]] = None,
     session: Optional[requests.Session] = None,
 ) -> Optional[JsonType]:
     """
@@ -46,6 +50,42 @@ def request_json(
             )
             resp.raise_for_status()
             return resp.json()
+        except requests.HTTPError as exc:
+            last_exc = exc
+            resp = exc.response
+            status_code = resp.status_code if resp else None
+
+            if fatal_statuses and status_code in fatal_statuses:
+                logging.error(
+                    "Fatal API response (%s): %s %s params=%s",
+                    status_code,
+                    method,
+                    url,
+                    params,
+                )
+                raise
+
+            retry_after = None
+            retry_on = set(retry_statuses or ())
+            if status_code == 429 or status_code in retry_on:
+                retry_after = _parse_retry_after(
+                    resp.headers.get("Retry-After") if resp else None
+                )
+
+            logging.warning(
+                "API request failed (%s/%s): %s %s params=%s error=%s",
+                attempt,
+                retries,
+                method,
+                url,
+                params,
+                exc,
+            )
+            if attempt < retries:
+                sleep_time = backoff ** (attempt - 1)
+                if retry_after:
+                    sleep_time = max(sleep_time, retry_after)
+                time.sleep(sleep_time)
         except Exception as exc:
             last_exc = exc
             logging.warning(

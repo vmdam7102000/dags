@@ -16,7 +16,7 @@ from plugins.utils.api_utils import request_json
 from plugins.utils.config_loader import load_yaml_config
 from plugins.utils.db_utils import insert_dynamic_records
 
-CONFIG = load_yaml_config("global_eod_prices.yml")["global_eod_prices"]
+CONFIG = load_yaml_config("global_stock_configs/global_eod_prices.yml")["global_eod_prices"]
 API_CFG = CONFIG["api"]
 DB_CFG = CONFIG["db"]
 CHUNK_SIZE = 400  # keep number of batches under core.max_map_length

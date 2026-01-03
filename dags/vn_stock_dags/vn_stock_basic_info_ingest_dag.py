@@ -16,7 +16,7 @@ from plugins.utils.api_utils import request_json
 from plugins.utils.config_loader import load_yaml_config
 from plugins.utils.db_utils import get_all_stock_codes, insert_dynamic_records
 
-CONFIG = load_yaml_config("stock_basic_info.yml")["stock_basic_info"]
+CONFIG = load_yaml_config("vn_stock_configs/stock_basic_info.yml")["stock_basic_info"]
 API_CFG = CONFIG["api"]
 DB_CFG = CONFIG["db"]
 CHUNK_SIZE = 400

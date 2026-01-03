@@ -14,7 +14,7 @@ from psycopg2.extras import execute_values
 
 from plugins.utils.config_loader import load_yaml_config
 
-CONFIG = load_yaml_config("ccxt_ohlcv_3m.yml")["ccxt_ohlcv_3m"]
+CONFIG = load_yaml_config("crypto_configs/ccxt_ohlcv_3m.yml")["ccxt_ohlcv_3m"]
 API_CFG = CONFIG["api"]
 DB_CFG = CONFIG["db"]
 
