@@ -3,7 +3,7 @@ global_eod_prices:
     url: "https://eodhd.com/api/eod/{ticker}"
     api_key_var: "eodhd_apikey"
     timeout: 30
-    lookback_days: 3
+    lookback_days: 10000
     from_param: "from"
     to_param: "to"
     fmt: "json"

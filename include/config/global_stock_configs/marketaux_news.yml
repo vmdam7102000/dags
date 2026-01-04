@@ -24,7 +24,7 @@ marketaux_news:
     published_after_param: "published_after"
     published_before_param: "published_before"
     language: "en"
-    enable_entity_search: true
+    enable_entity_search: false
     enable_search_fallback: true
     max_search_terms: 2
     chunk_size: 50
@@ -43,7 +43,7 @@ marketaux_news:
     company_universe_column: "universe"
     only_active: true
     universe: null
-    company_limit: 10
+    company_limit: 20
     news_table: "raw_global_stock_data.news_articles"
     conflict_keys:
       - "mongo_uuid"
