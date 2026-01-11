@@ -13,6 +13,7 @@ from airflow import DAG
 from airflow.decorators import task
 from airflow.models import Variable
 from airflow.operators.python import get_current_context
+from airflow.operators.trigger_dagrun import TriggerDagRunOperator
 from airflow.providers.postgres.hooks.postgres import PostgresHook
 # from pymongo import MongoClient, UpdateOne
 # from pymongo.errors import BulkWriteError
@@ -24,6 +25,7 @@ from plugins.utils.db_utils import insert_dynamic_records
 CONFIG = load_yaml_config("global_stock_configs/marketaux_news.yml")["marketaux_news"]
 API_CFG = CONFIG["api"]
 DB_CFG = CONFIG["db"]
+SCHEDULE = CONFIG.get("schedule", "0 6 * * *")
 # MONGO_CFG = CONFIG["mongo"]
 
 API_KEY = Variable.get(API_CFG["api_key_var"], default_var="")
@@ -600,11 +602,11 @@ with DAG(
         "retries": 2,
         "retry_delay": timedelta(minutes=5),
     },
-    schedule_interval="0 6 * * *",
+    schedule_interval=SCHEDULE,
     start_date=datetime(2024, 1, 1),
     catchup=False,
     max_active_runs=1,
-    tags=["news", "marketaux", "mongo", "postgres"],
+    tags=["news", "marketaux", "global_stock"],
 ) as dag:
 
     @task
@@ -711,4 +713,14 @@ with DAG(
 
     companies = get_companies()
     company_batches = chunk_companies(companies)
-    sync_company_batch.expand(companies=company_batches)
+    sync_tasks = sync_company_batch.expand(companies=company_batches)
+
+    trigger_evaluations = TriggerDagRunOperator(
+        task_id="trigger_daily_sentiment_evaluations",
+        trigger_dag_id="daily_sentiment_evaluations_dag",
+        execution_date="{{ logical_date }}",
+        reset_dag_run=True,
+        wait_for_completion=False,
+    )
+
+    sync_tasks >> trigger_evaluations

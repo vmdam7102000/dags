@@ -1,4 +1,5 @@
 marketaux_news:
+  schedule: "0 6 * * *"
   api:
     news_url: "https://api.marketaux.com/v1/news/all"
     entity_search_url: "https://api.marketaux.com/v1/entity/search"

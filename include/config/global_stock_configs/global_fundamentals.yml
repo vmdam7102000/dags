@@ -1,0 +1,36 @@
+global_fundamentals:
+  schedule: "0 4 * * *"
+  api:
+    url: "https://eodhd.com/api/fundamentals/{ticker}"
+    api_key_var: "eodhd_apikey"
+    timeout: 30
+    retries: 3
+    backoff: 1.5
+    fmt: "json"
+    throttle_seconds: 1
+    chunk_size: 200
+
+  db:
+    postgres_conn_id: "keynum-central-pg"
+    company_table: "raw_global_stock_data.companies"
+    company_id_column: "id"
+    company_ticker_column: "ticker"
+    only_active: true
+
+    snapshot_table: "raw_global_stock_data.company_fundamentals_snapshots"
+    highlights_table: "raw_global_stock_data.company_highlights"
+    valuation_table: "raw_global_stock_data.company_valuation"
+    shares_stats_table: "raw_global_stock_data.company_shares_stats"
+    technicals_table: "raw_global_stock_data.company_technicals"
+
+    snapshot_conflict_keys:
+      - "company_id"
+      - "date_of_data"
+    highlights_conflict_keys:
+      - "snapshot_id"
+    valuation_conflict_keys:
+      - "snapshot_id"
+    shares_stats_conflict_keys:
+      - "snapshot_id"
+    technicals_conflict_keys:
+      - "snapshot_id"
