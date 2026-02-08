@@ -1,0 +1,43 @@
+sp500_eod_prices:
+  api:
+    url: "https://eodhd.com/api/eod/{ticker}"
+    api_key_var: "eodhd_apikey"
+    timeout: 30
+    lookback_days: 10000
+    from_param: "from"
+    to_param: "to"
+    fmt: "json"
+    throttle_seconds: 1
+
+  db:
+    postgres_conn_id: "keynum-central-pg"
+    company_table: "raw_sp500_stock_data.companies"
+    company_id_column: "id"
+    company_ticker_column: "ticker"
+    only_active: true
+
+    price_table: "raw_sp500_stock_data.daily_prices"
+    conflict_keys:
+      - "company_id"
+      - "ticker"
+      - "date"
+
+    columns:
+      - json_key: "company_id"
+        column: "company_id"
+      - json_key: "ticker"
+        column: "ticker"
+      - json_key: "date"
+        column: "date"
+      - json_key: "open"
+        column: "open"
+      - json_key: "high"
+        column: "high"
+      - json_key: "low"
+        column: "low"
+      - json_key: "close"
+        column: "close"
+      - json_key: "adjusted_close"
+        column: "adjusted_close"
+      - json_key: "volume"
+        column: "volume"
