@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import logging
 from datetime import datetime, timedelta, timezone
-from typing import Dict, Optional
+from typing import Any, Dict, List, Optional
 
 from airflow import DAG
 from airflow.decorators import task
@@ -47,16 +47,40 @@ def _parse_conf_dt(value: Optional[str]) -> Optional[datetime]:
         return None
 
 
+def _parse_conf_symbols(value: Any) -> Optional[List[str]]:
+    if value is None:
+        return None
+    if isinstance(value, str):
+        symbols = [s.strip().upper() for s in value.split(",") if s.strip()]
+    elif isinstance(value, (list, tuple, set)):
+        symbols = [str(s).strip().upper() for s in value if str(s).strip()]
+    else:
+        raise ValueError("`symbols` must be a list or comma-separated string")
+    unique_symbols = sorted(set(symbols))
+    return unique_symbols or None
+
+
 def _ensure_utc(dt_value: datetime) -> datetime:
     if dt_value.tzinfo is None:
         return dt_value.replace(tzinfo=timezone.utc)
     return dt_value.astimezone(timezone.utc)
 
 
-def aggregate_window(conn, start_ts_ms: int, end_ts_ms: int) -> int:
+def aggregate_window(
+    conn,
+    start_ts_ms: int,
+    end_ts_ms: int,
+    symbols: Optional[List[str]] = None,
+) -> int:
     """
     Aggregate 3m OHLCV data into 15m candles and upsert into the target table.
     """
+    symbol_filter_sql = ""
+    params: List[Any] = [start_ts_ms, end_ts_ms]
+    if symbols:
+        symbol_filter_sql = f"\n          AND {SOURCE_TABLE}.symbol = ANY(%s)"
+        params.append(symbols)
+
     sql = f"""
     WITH base AS (
         SELECT
@@ -80,6 +104,7 @@ def aggregate_window(conn, start_ts_ms: int, end_ts_ms: int) -> int:
         FROM {SOURCE_TABLE}
         WHERE {SOURCE_TABLE}.timestamp >= %s
           AND {SOURCE_TABLE}.timestamp < %s
+          {symbol_filter_sql}
     ),
     aggregated AS (
         SELECT
@@ -111,7 +136,7 @@ def aggregate_window(conn, start_ts_ms: int, end_ts_ms: int) -> int:
         datetime = EXCLUDED.datetime;
     """
     with conn.cursor() as cursor:
-        cursor.execute(sql, (start_ts_ms, end_ts_ms))
+        cursor.execute(sql, tuple(params))
         inserted = cursor.rowcount
     conn.commit()
     return inserted
@@ -143,6 +168,7 @@ with DAG(
 
         conf_since = _parse_conf_dt(conf.get("since"))
         conf_until = _parse_conf_dt(conf.get("until") or conf.get("end"))
+        conf_symbols = _parse_conf_symbols(conf.get("symbols"))
 
         start_dt_raw = conf_since or (logical_date - timedelta(days=LOOKBACK_DAYS))
         end_dt_raw = conf_until or logical_date
@@ -160,13 +186,16 @@ with DAG(
         batch_ms = max(BATCH_DAYS, 1) * 24 * 60 * 60 * 1000
         total_inserted = 0
 
+        if conf_symbols:
+            logger.info("Applying symbol filter for aggregation: %s", conf_symbols)
+
         hook = PostgresHook(postgres_conn_id=DB_CFG["postgres_conn_id"])
         conn = hook.get_conn()
         try:
             window_start = start_ts_ms
             while window_start < end_ts_ms:
                 window_end = min(window_start + batch_ms, end_ts_ms)
-                inserted = aggregate_window(conn, window_start, window_end)
+                inserted = aggregate_window(conn, window_start, window_end, conf_symbols)
                 total_inserted += inserted
                 logger.info(
                     "Aggregated %s rows for window %s - %s",
