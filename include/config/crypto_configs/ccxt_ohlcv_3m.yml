@@ -4,6 +4,7 @@ ccxt_ohlcv_3m:
     limit: 1000
     since_days: 1          # look back from current date; leave blank to fetch all
     rate_limit_floor: 0.2    # seconds; minimum sleep between calls
+    exclude_symbols: ["PIPPIN", "KITE", "MORPHO"]  # temporarily skipped in main 3m sync
 
   db:
     postgres_conn_id: "keynum-central-pg"
@@ -11,3 +12,20 @@ ccxt_ohlcv_3m:
     metadata_table: "raw_crypto_data.coin_marketcap_top100_info"
     checkpoint_table: "raw_crypto_data.ohlcv_checkpoint"
     symbol_quote: "USDT"     # pair symbol with this quote
+
+ccxt_ohlcv_3m_backfill_special:
+  api:
+    timeframe: "3m"
+    limit: 1000
+    since_days: 0
+    rate_limit_floor: 0.2
+    pool_name: "ccxt_ohlcv_pool"
+    task_concurrency: 3
+    include_symbols: ["PIPPIN", "KITE", "MORPHO"]
+
+  db:
+    postgres_conn_id: "keynum-central-pg"
+    target_table: "raw_crypto_data.ohlcv_3m"
+    metadata_table: "raw_crypto_data.coin_marketcap_top100_info"
+    checkpoint_table: "raw_crypto_data.ohlcv_checkpoint"
+    symbol_quote: "USDT"

@@ -1,4 +1,4 @@
-# dags/crypto/sync_crypto_ohlcv_3m_dag_dag.py
+# dags/crypto/sync_crypto_ohlcv_3m_backfill_special_dag.py
 from __future__ import annotations
 
 import asyncio
@@ -9,33 +9,49 @@ from typing import Any, Dict, List, Optional, Tuple
 import ccxt.async_support as ccxt
 from airflow import DAG
 from airflow.decorators import task
+from airflow.operators.python import get_current_context
 from airflow.providers.postgres.hooks.postgres import PostgresHook
 from psycopg2.extras import execute_values
 
 from plugins.utils.config_loader import load_yaml_config
 
-CONFIG = load_yaml_config("crypto_configs/ccxt_ohlcv_3m.yml")["ccxt_ohlcv_3m"]
+CONFIG = load_yaml_config("crypto_configs/ccxt_ohlcv_3m.yml")["ccxt_ohlcv_3m_backfill_special"]
 API_CFG = CONFIG["api"]
 DB_CFG = CONFIG["db"]
 
 TIMEFRAME: str = API_CFG.get("timeframe", "3m")
-BATCH_LIMIT: int = API_CFG.get("limit", 1000)
-SLEEP_FLOOR: float = API_CFG.get("rate_limit_floor", 0.2)
+BATCH_LIMIT: int = int(API_CFG.get("limit", 1000))
+SLEEP_FLOOR: float = float(API_CFG.get("rate_limit_floor", 0.2))
 QUOTE = DB_CFG.get("symbol_quote", "USDT")
 POOL_NAME: str = API_CFG.get("pool_name", "ccxt_ohlcv_pool")
 PAIR_TASK_CONCURRENCY: int = int(API_CFG.get("task_concurrency", 3))
-EXCLUDE_SYMBOLS = {
+TARGET_SYMBOLS = {
     str(symbol).strip().upper()
-    for symbol in API_CFG.get("exclude_symbols", [])
+    for symbol in API_CFG.get("include_symbols", [])
     if str(symbol).strip()
 }
 
-logger = logging.getLogger("ccxt_ohlcv_3m_dag")
+logger = logging.getLogger("ccxt_ohlcv_3m_backfill_special_dag")
 if not logger.handlers:
     handler = logging.StreamHandler()
     handler.setFormatter(logging.Formatter("%(asctime)s [%(levelname)s] %(message)s"))
     logger.addHandler(handler)
     logger.setLevel(logging.INFO)
+
+
+def _parse_conf_dt(value: Optional[str]) -> Optional[datetime]:
+    if not value:
+        return None
+    try:
+        return datetime.fromisoformat(value.replace("Z", "+00:00"))
+    except ValueError:
+        return None
+
+
+def _ensure_utc(dt_value: datetime) -> datetime:
+    if dt_value.tzinfo is None:
+        return dt_value.replace(tzinfo=timezone.utc)
+    return dt_value.astimezone(timezone.utc)
 
 
 def _since_from_checkpoint(last_ts_ms: Optional[int]) -> Optional[int]:
@@ -51,37 +67,30 @@ def _since_from_checkpoint(last_ts_ms: Optional[int]) -> Optional[int]:
     return None
 
 
-def load_pairs(conn) -> List[Tuple[str, str]]:
+def load_pairs(conn, symbols: List[str]) -> List[Tuple[str, str]]:
+    if not symbols:
+        return []
     sql = f"""
     SELECT symbol, available_exchange
     FROM {DB_CFG['metadata_table']}
-    WHERE available_exchange IS NOT NULL AND available_exchange <> ''
+    WHERE available_exchange IS NOT NULL
+      AND available_exchange <> ''
+      AND UPPER(symbol) = ANY(%s)
     """
     with conn.cursor() as cur:
-        cur.execute(sql)
+        cur.execute(sql, (symbols,))
         rows = cur.fetchall()
 
     pairs: List[Tuple[str, str]] = []
     seen: set[Tuple[str, str]] = set()
-    excluded_hits = 0
     for sym, exch_str in rows:
-        normalized_symbol = str(sym).upper()
-        if normalized_symbol in EXCLUDE_SYMBOLS:
-            excluded_hits += 1
-            continue
         exchanges = [e.strip() for e in exch_str.split(",") if e.strip()]
         for ex in exchanges:
-            pair = (normalized_symbol, ex)
+            pair = (str(sym).upper(), ex)
             if pair in seen:
                 continue
             seen.add(pair)
             pairs.append(pair)
-    if excluded_hits:
-        logger.info(
-            "Skipped %s metadata symbols from main 3m sync due to exclude_symbols=%s",
-            excluded_hits,
-            sorted(EXCLUDE_SYMBOLS),
-        )
     return pairs
 
 
@@ -145,7 +154,12 @@ def upsert_ohlcv(conn, records: List[Dict[str, Any]]) -> int:
     return len(records)
 
 
-async def _fetch_ohlcv(exchange: ccxt.Exchange, symbol: str, since_ms: Optional[int]) -> List[List[Any]]:
+async def _fetch_ohlcv(
+    exchange: ccxt.Exchange,
+    symbol: str,
+    since_ms: Optional[int],
+    until_ms: Optional[int],
+) -> List[List[Any]]:
     all_rows: List[List[Any]] = []
     while True:
         rows = await exchange.fetch_ohlcv(
@@ -156,7 +170,14 @@ async def _fetch_ohlcv(exchange: ccxt.Exchange, symbol: str, since_ms: Optional[
         )
         if not rows:
             break
-        all_rows.extend(rows)
+
+        if until_ms is not None:
+            all_rows.extend([row for row in rows if row[0] < until_ms])
+            if rows[-1][0] >= until_ms:
+                break
+        else:
+            all_rows.extend(rows)
+
         since_ms = rows[-1][0] + 1
         await asyncio.sleep(max(exchange.rateLimit / 1000, SLEEP_FLOOR))
         if len(rows) < BATCH_LIMIT:
@@ -164,14 +185,19 @@ async def _fetch_ohlcv(exchange: ccxt.Exchange, symbol: str, since_ms: Optional[
     return all_rows
 
 
-async def fetch_for_pair(exchange_id: str, symbol: str, since_ms: Optional[int]) -> List[Dict[str, Any]]:
+async def fetch_for_pair(
+    exchange_id: str,
+    symbol: str,
+    since_ms: Optional[int],
+    until_ms: Optional[int],
+) -> List[Dict[str, Any]]:
     exchange_class = getattr(ccxt, exchange_id, None)
     if not exchange_class:
         raise ValueError(f"Exchange {exchange_id} not found in ccxt")
     exchange = exchange_class({"enableRateLimit": True})
     await exchange.load_markets()
     try:
-        rows = await _fetch_ohlcv(exchange, symbol, since_ms)
+        rows = await _fetch_ohlcv(exchange, symbol, since_ms, until_ms)
     finally:
         await exchange.close()
 
@@ -194,37 +220,52 @@ async def fetch_for_pair(exchange_id: str, symbol: str, since_ms: Optional[int])
 
 
 with DAG(
-    dag_id="sync_crypto_ohlcv_3m_dag",
-    description="Sync OHLCV 3m from CCXT into Postgres (incremental)",
+    dag_id="sync_crypto_ohlcv_3m_backfill_special_dag",
+    description="Manual 3m backfill sync for selected symbols only",
     default_args={
         "owner": "crypto-data",
         "depends_on_past": False,
         "retries": 2,
         "retry_delay": timedelta(minutes=5),
     },
-    schedule_interval="*/3 * * * *",  # every 3 minutes
+    schedule_interval=None,
     start_date=datetime(2024, 1, 1),
     catchup=False,
     concurrency=PAIR_TASK_CONCURRENCY,
     max_active_runs=1,
-    tags=["crypto", "ccxt", "ohlcv", "3m"],
+    tags=["crypto", "ccxt", "ohlcv", "3m", "backfill"],
 ) as dag:
 
     @task
     def get_pairs() -> List[Dict[str, str]]:
+        if not TARGET_SYMBOLS:
+            raise ValueError("Config include_symbols is empty for special backfill DAG")
+
         hook = PostgresHook(postgres_conn_id=DB_CFG["postgres_conn_id"])
         conn = hook.get_conn()
         try:
-            pairs = load_pairs(conn)
+            selected_symbols = sorted(TARGET_SYMBOLS)
+            pairs = load_pairs(conn, selected_symbols)
             if not pairs:
-                raise ValueError("No symbol/exchange pairs found in metadata table")
-            logger.info("Loaded %s symbol/exchange pairs to sync", len(pairs))
+                raise ValueError(
+                    f"No symbol/exchange pairs found in metadata table for symbols={selected_symbols}"
+                )
+            logger.info("Loaded %s pairs for symbols=%s", len(pairs), selected_symbols)
             return [{"symbol": sym, "exchange": exch} for sym, exch in pairs]
         finally:
             conn.close()
 
     @task(pool=POOL_NAME)
     def sync_pair(pair: Dict[str, str]) -> None:
+        context = get_current_context()
+        dag_run = context.get("dag_run")
+        conf = dict(dag_run.conf or {}) if dag_run and dag_run.conf else {}
+        conf_since = _parse_conf_dt(conf.get("since"))
+        conf_until = _parse_conf_dt(conf.get("until") or conf.get("end"))
+
+        if conf_since and conf_until and _ensure_utc(conf_until) <= _ensure_utc(conf_since):
+            raise ValueError("`until` must be greater than `since`")
+
         symbol = pair["symbol"]
         exchange_id = pair["exchange"]
 
@@ -232,10 +273,21 @@ with DAG(
         conn = hook.get_conn()
         try:
             last_ts_ms = load_checkpoint(conn, symbol, exchange_id)
-            since_ms = _since_from_checkpoint(last_ts_ms)
-            logger.info("Fetching %s %s since %s", exchange_id, symbol, since_ms)
+            since_ms = (
+                int(_ensure_utc(conf_since).timestamp() * 1000)
+                if conf_since
+                else _since_from_checkpoint(last_ts_ms)
+            )
+            until_ms = int(_ensure_utc(conf_until).timestamp() * 1000) if conf_until else None
+            logger.info(
+                "Backfill fetching %s %s since=%s until=%s",
+                exchange_id,
+                symbol,
+                since_ms,
+                until_ms,
+            )
 
-            records = asyncio.run(fetch_for_pair(exchange_id, symbol, since_ms))
+            records = asyncio.run(fetch_for_pair(exchange_id, symbol, since_ms, until_ms))
             if not records:
                 logger.info("No new data for %s %s", exchange_id, symbol)
                 return
