@@ -4,7 +4,7 @@ ccxt_ohlcv_3m:
     limit: 1000
     since_days: 1          # look back from current date; leave blank to fetch all
     rate_limit_floor: 0.2    # seconds; minimum sleep between calls
-    exclude_symbols: ["PIPPIN", "KITE", "MORPHO"]  # temporarily skipped in main 3m sync
+    exclude_symbols: []
 
   db:
     postgres_conn_id: "keynum-central-pg"
