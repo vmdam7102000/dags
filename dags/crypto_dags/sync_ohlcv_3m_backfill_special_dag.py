@@ -22,6 +22,7 @@ DB_CFG = CONFIG["db"]
 TIMEFRAME: str = API_CFG.get("timeframe", "3m")
 BATCH_LIMIT: int = int(API_CFG.get("limit", 1000))
 SLEEP_FLOOR: float = float(API_CFG.get("rate_limit_floor", 0.2))
+GATEIO_MAX_POINTS: int = int(API_CFG.get("gateio_max_points", 10000))
 QUOTE = DB_CFG.get("symbol_quote", "USDT")
 POOL_NAME: str = API_CFG.get("pool_name", "ccxt_ohlcv_pool")
 PAIR_TASK_CONCURRENCY: int = int(API_CFG.get("task_concurrency", 3))
@@ -65,6 +66,25 @@ def _since_from_checkpoint(last_ts_ms: Optional[int]) -> Optional[int]:
         cutoff = datetime.now(timezone.utc) - timedelta(days=since_days)
         return int(cutoff.timestamp() * 1000)
     return None
+
+
+def _timeframe_to_ms(timeframe: str) -> int:
+    unit = timeframe[-1].lower()
+    value = int(timeframe[:-1])
+    factors = {
+        "m": 60 * 1000,
+        "h": 60 * 60 * 1000,
+        "d": 24 * 60 * 60 * 1000,
+        "w": 7 * 24 * 60 * 60 * 1000,
+    }
+    if unit not in factors:
+        raise ValueError(f"Unsupported timeframe unit: {timeframe}")
+    return value * factors[unit]
+
+
+def _is_gateio_lookback_error(exc: Exception) -> bool:
+    message = str(exc)
+    return "Candlestick too long ago" in message and "10000 points ago" in message
 
 
 def load_pairs(conn, symbols: List[str]) -> List[Tuple[str, str]]:
@@ -162,11 +182,18 @@ async def _fetch_ohlcv(
 ) -> List[List[Any]]:
     all_rows: List[List[Any]] = []
     while True:
+        params: Dict[str, Any] = {}
+        if exchange.id == "gateio" and since_ms is not None:
+            params["from"] = int(since_ms / 1000)
+            if until_ms is not None:
+                params["to"] = int(until_ms / 1000)
+
         rows = await exchange.fetch_ohlcv(
             f"{symbol}/{QUOTE}",
             timeframe=TIMEFRAME,
             since=since_ms,
             limit=BATCH_LIMIT,
+            params=params,
         )
         if not rows:
             break
@@ -286,8 +313,39 @@ with DAG(
                 since_ms,
                 until_ms,
             )
+            try:
+                records = asyncio.run(fetch_for_pair(exchange_id, symbol, since_ms, until_ms))
+            except ccxt.BadRequest as exc:
+                if exchange_id != "gateio" or not _is_gateio_lookback_error(exc):
+                    raise
 
-            records = asyncio.run(fetch_for_pair(exchange_id, symbol, since_ms, until_ms))
+                timeframe_ms = _timeframe_to_ms(TIMEFRAME)
+                now_ms = int(datetime.now(timezone.utc).timestamp() * 1000)
+                gate_min_since_ms = now_ms - max(1, GATEIO_MAX_POINTS) * timeframe_ms
+                retry_since_ms = (
+                    max(since_ms, gate_min_since_ms) if since_ms is not None else gate_min_since_ms
+                )
+
+                if until_ms is not None and until_ms <= retry_since_ms:
+                    logger.warning(
+                        "Skipping %s %s: gateio lookback limit reached (since=%s, retry_since=%s, until=%s)",
+                        exchange_id,
+                        symbol,
+                        since_ms,
+                        retry_since_ms,
+                        until_ms,
+                    )
+                    return
+
+                logger.warning(
+                    "Gate.io lookback limit for %s %s (since=%s). Retrying from since=%s with max_points=%s",
+                    exchange_id,
+                    symbol,
+                    since_ms,
+                    retry_since_ms,
+                    GATEIO_MAX_POINTS,
+                )
+                records = asyncio.run(fetch_for_pair(exchange_id, symbol, retry_since_ms, until_ms))
             if not records:
                 logger.info("No new data for %s %s", exchange_id, symbol)
                 return
