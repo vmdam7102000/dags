@@ -31,6 +31,11 @@ TARGET_SYMBOLS = {
     for symbol in API_CFG.get("include_symbols", [])
     if str(symbol).strip()
 }
+PAIR_OVERRIDES = {
+    str(symbol).strip().upper(): str(pair).strip()
+    for symbol, pair in (API_CFG.get("symbol_pair_overrides") or {}).items()
+    if str(symbol).strip() and str(pair).strip()
+}
 
 logger = logging.getLogger("ccxt_ohlcv_3m_backfill_special_dag")
 if not logger.handlers:
@@ -85,6 +90,24 @@ def _timeframe_to_ms(timeframe: str) -> int:
 def _is_gateio_lookback_error(exc: Exception) -> bool:
     message = str(exc)
     return "Candlestick too long ago" in message and "10000 points ago" in message
+
+
+def _resolve_market_symbol(exchange: ccxt.Exchange, symbol: str) -> str:
+    override = PAIR_OVERRIDES.get(symbol.upper())
+    if not override:
+        return f"{symbol}/{QUOTE}"
+
+    if hasattr(exchange, "markets") and override in exchange.markets:
+        return override
+
+    if hasattr(exchange, "markets_by_id") and override in exchange.markets_by_id:
+        market = exchange.markets_by_id[override]
+        if isinstance(market, list):
+            market = market[0] if market else None
+        if isinstance(market, dict) and market.get("symbol"):
+            return str(market["symbol"])
+
+    return override
 
 
 def load_pairs(conn, symbols: List[str]) -> List[Tuple[str, str]]:
@@ -176,7 +199,7 @@ def upsert_ohlcv(conn, records: List[Dict[str, Any]]) -> int:
 
 async def _fetch_ohlcv(
     exchange: ccxt.Exchange,
-    symbol: str,
+    market_symbol: str,
     since_ms: Optional[int],
     until_ms: Optional[int],
 ) -> List[List[Any]]:
@@ -189,7 +212,7 @@ async def _fetch_ohlcv(
                 params["to"] = int(until_ms / 1000)
 
         rows = await exchange.fetch_ohlcv(
-            f"{symbol}/{QUOTE}",
+            market_symbol,
             timeframe=TIMEFRAME,
             since=since_ms,
             limit=BATCH_LIMIT,
@@ -224,7 +247,14 @@ async def fetch_for_pair(
     exchange = exchange_class({"enableRateLimit": True})
     await exchange.load_markets()
     try:
-        rows = await _fetch_ohlcv(exchange, symbol, since_ms, until_ms)
+        market_symbol = _resolve_market_symbol(exchange, symbol)
+        logger.info(
+            "Using market symbol %s for exchange=%s symbol=%s",
+            market_symbol,
+            exchange_id,
+            symbol,
+        )
+        rows = await _fetch_ohlcv(exchange, market_symbol, since_ms, until_ms)
     finally:
         await exchange.close()
 

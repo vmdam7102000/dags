@@ -23,6 +23,8 @@ ccxt_ohlcv_3m_backfill_special:
     pool_name: "ccxt_ohlcv_pool"
     task_concurrency: 3
     include_symbols: ["PIPPIN", "KITE", "MORPHO"]
+    symbol_pair_overrides:
+      PIPPIN: "PIPPINUSDT"
 
   db:
     postgres_conn_id: "keynum-central-pg"
