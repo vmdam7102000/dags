@@ -1,0 +1,40 @@
+sync_crypto_github_metrics_dag:
+  api:
+    url: "https://pro-api.coinmarketcap.com/v2/cryptocurrency/info"
+    api_key_var: "cmc_api_key"
+    api_key_header: "X-CMC_PRO_API_KEY"
+    timeout: 60
+    retries: 4
+    backoff: 2
+    request_pause_seconds: 2
+    failure_pause_seconds: 10
+    retry_statuses:
+      - 429
+      - 500
+      - 502
+      - 503
+      - 504
+
+  github_api:
+    url_template: "https://api.github.com/repos/{owner}/{repo}"
+    api_key_var: "github_api_token"
+    api_key_prefix: "Bearer"
+    accept: "application/vnd.github+json"
+    api_version: "2022-11-28"
+    timeout: 60
+    retries: 4
+    backoff: 2
+    request_pause_seconds: 1
+    failure_pause_seconds: 5
+    retry_statuses:
+      - 403
+      - 429
+      - 500
+      - 502
+      - 503
+      - 504
+
+  db:
+    postgres_conn_id: "keynum-central-pg"
+    source_table: "raw_crypto_data.cryptocurrency_top100"
+    target_table: "raw_crypto_data.cryptocurrency_github_metrics_daily"

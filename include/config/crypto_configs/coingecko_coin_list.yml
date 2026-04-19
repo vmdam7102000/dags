@@ -1,0 +1,49 @@
+sync_crypto_coingecko_ids_dag:
+  api:
+    url: "https://api.coingecko.com/api/v3/coins/list"
+    api_key_var: "coingecko_api_key"
+    api_key_header: "x-cg-demo-api-key"
+    timeout: 60
+    retries: 4
+    backoff: 2
+    retry_statuses:
+      - 429
+      - 500
+      - 502
+      - 503
+      - 504
+
+  db:
+    postgres_conn_id: "keynum-central-pg"
+    target_table: "raw_crypto_data.cryptocurrency_top100"
+
+sync_crypto_coingecko_details_dag:
+  api:
+    url: "https://api.coingecko.com/api/v3/coins/{coingecko_id}"
+    api_key_var: "coingecko_api_key"
+    api_key_header: "x-cg-demo-api-key"
+    timeout: 60
+    retries: 4
+    backoff: 2
+    request_pause_seconds: 8
+    failure_pause_seconds: 20
+    batch_size: 5
+    cursor_var: "coingecko_details_cursor_id"
+    only_missing_details: true
+    retry_statuses:
+      - 429
+      - 500
+      - 502
+      - 503
+      - 504
+    params:
+      localization: false
+      tickers: false
+      market_data: true
+      community_data: false
+      developer_data: false
+      sparkline: false
+
+  db:
+    postgres_conn_id: "keynum-central-pg"
+    target_table: "raw_crypto_data.cryptocurrency_top100"
