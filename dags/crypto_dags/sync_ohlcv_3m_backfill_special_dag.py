@@ -87,9 +87,22 @@ def _timeframe_to_ms(timeframe: str) -> int:
     return value * factors[unit]
 
 
+def _now_ms() -> int:
+    return int(datetime.now(timezone.utc).timestamp() * 1000)
+
+
 def _is_gateio_lookback_error(exc: Exception) -> bool:
     message = str(exc)
     return "Candlestick too long ago" in message and "10000 points ago" in message
+
+
+def _sort_unique_ohlcv_rows(rows: List[List[Any]]) -> List[List[Any]]:
+    unique_rows: Dict[int, List[Any]] = {}
+    for row in rows:
+        if not row:
+            continue
+        unique_rows[int(row[0])] = row
+    return [unique_rows[ts] for ts in sorted(unique_rows)]
 
 
 def _resolve_market_symbol(exchange: ccxt.Exchange, symbol: str) -> str:
@@ -203,6 +216,9 @@ async def _fetch_ohlcv(
     since_ms: Optional[int],
     until_ms: Optional[int],
 ) -> List[List[Any]]:
+    if exchange.id == "bybit" and since_ms is not None:
+        return await _fetch_ohlcv_bybit(exchange, market_symbol, since_ms, until_ms)
+
     all_rows: List[List[Any]] = []
     while True:
         params: Dict[str, Any] = {}
@@ -232,7 +248,56 @@ async def _fetch_ohlcv(
         await asyncio.sleep(max(exchange.rateLimit / 1000, SLEEP_FLOOR))
         if len(rows) < BATCH_LIMIT:
             break
-    return all_rows
+    return _sort_unique_ohlcv_rows(all_rows)
+
+
+async def _fetch_ohlcv_bybit(
+    exchange: ccxt.Exchange,
+    market_symbol: str,
+    since_ms: int,
+    until_ms: Optional[int],
+) -> List[List[Any]]:
+    all_rows: List[List[Any]] = []
+    page_until_ms = until_ms if until_ms is not None else _now_ms()
+
+    while True:
+        params = {"until": page_until_ms}
+        rows = await exchange.fetch_ohlcv(
+            market_symbol,
+            timeframe=TIMEFRAME,
+            since=since_ms,
+            limit=BATCH_LIMIT,
+            params=params,
+        )
+        if not rows:
+            break
+
+        filtered_rows = rows
+        if until_ms is not None:
+            filtered_rows = [row for row in filtered_rows if row[0] < until_ms]
+        if filtered_rows:
+            all_rows.extend(filtered_rows)
+
+        earliest_ts_ms = int(rows[0][0])
+        if earliest_ts_ms <= since_ms:
+            break
+        if len(rows) < BATCH_LIMIT:
+            break
+
+        next_page_until_ms = earliest_ts_ms - 1
+        if next_page_until_ms >= page_until_ms:
+            logger.warning(
+                "Stopping Bybit pagination for %s because page boundary did not move (until=%s, earliest=%s)",
+                market_symbol,
+                page_until_ms,
+                earliest_ts_ms,
+            )
+            break
+
+        page_until_ms = next_page_until_ms
+        await asyncio.sleep(max(exchange.rateLimit / 1000, SLEEP_FLOOR))
+
+    return _sort_unique_ohlcv_rows(all_rows)
 
 
 async def fetch_for_pair(
@@ -350,7 +415,7 @@ with DAG(
                     raise
 
                 timeframe_ms = _timeframe_to_ms(TIMEFRAME)
-                now_ms = int(datetime.now(timezone.utc).timestamp() * 1000)
+                now_ms = _now_ms()
                 gate_min_since_ms = now_ms - max(1, GATEIO_MAX_POINTS) * timeframe_ms
                 retry_since_ms = (
                     max(since_ms, gate_min_since_ms) if since_ms is not None else gate_min_since_ms
