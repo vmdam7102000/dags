@@ -187,6 +187,7 @@ def load_canonical_symbol_targets(
     *,
     run_table: str,
     snapshot_table: str,
+    expected_row_count: int = 50,
     default_data_start_at: datetime = DEFAULT_DATA_START_AT,
     stablecoin_overrides: Optional[Mapping[Any, Any]] = None,
     wrapped_overrides: Optional[Mapping[Any, Any]] = None,
@@ -205,10 +206,11 @@ def load_canonical_symbol_targets(
                 snapshot.snapshot_date
             FROM {snapshot_table} AS snapshot
             JOIN {run_table} AS run USING (snapshot_date)
-            WHERE run.row_count = 30
+            WHERE run.row_count = %s
               AND run.payload_sha256 IS NOT NULL
             ORDER BY snapshot.cmc_id, run.source_available_at, snapshot.snapshot_date
-            """
+            """,
+            (expected_row_count,),
         )
         rows = [
             {
@@ -240,7 +242,9 @@ def resolve_spot_market(
     """Resolve an exact Phase-1 spot market; no quote fallback is allowed."""
     quotes = [normalize_symbol(quote) for quote in quote_priority]
     if quotes != ["USDT"]:
-        raise ValueError("CMC Top 30 Phase 1 supports only the USDT quote")
+        raise ValueError(
+            "CMC Top 50 (legacy cmc_top30 contract) supports only the USDT quote"
+        )
     symbol = normalize_symbol(asset_symbol)
     expected_pair = f"{symbol}/USDT"
     requested_pair = str(override).strip() if override else expected_pair

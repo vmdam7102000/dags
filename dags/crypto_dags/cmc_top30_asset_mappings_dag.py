@@ -14,9 +14,11 @@ if DAGS_ROOT not in sys.path:
 import ccxt
 from airflow import DAG
 from airflow.decorators import task
+from airflow.operators.python import ShortCircuitOperator
 from airflow.operators.trigger_dagrun import TriggerDagRunOperator
 from airflow.providers.postgres.hooks.postgres import PostgresHook
 
+from crypto_dags.cmc_top30_universe import TOP_N, parse_bool
 from plugins.utils.cmc_top30_assets import (
     DEFAULT_DATA_START_AT,
     load_canonical_symbol_targets,
@@ -37,7 +39,20 @@ DOWNSTREAM_CFG = CONFIG.get("downstream") or {}
 QUOTE = str(MARKET_CFG.get("quote", "USDT")).strip().upper()
 
 if QUOTE != "USDT":
-    raise ValueError("CMC Top 30 Phase 1 mapping only supports the USDT quote")
+    raise ValueError(
+        "CMC Top 50 (legacy cmc_top30 contract) mapping only supports the USDT quote"
+    )
+
+
+def _should_trigger_backfill(**context) -> bool:
+    dag_run = context.get("dag_run")
+    conf = dict(dag_run.conf or {}) if dag_run else {}
+    enabled = parse_bool(
+        conf.get("trigger_backfill"),
+        default=bool(DOWNSTREAM_CFG.get("trigger_backfill", True)),
+    )
+    logging.info("CMC Top 50 downstream backfill trigger enabled=%s", enabled)
+    return enabled
 
 
 def _configured_data_start() -> datetime:
@@ -165,7 +180,10 @@ def _resolve_target(
 
 with DAG(
     dag_id="sync_cmc_top30_asset_mappings_dag",
-    description="Resolve canonical CMC Top 30 symbols to one sticky USDT venue",
+    description=(
+        "Resolve canonical CMC Top 50 symbols to one sticky USDT venue "
+        "using legacy cmc_top30 names"
+    ),
     default_args={
         "owner": "crypto-data",
         "depends_on_past": False,
@@ -179,7 +197,14 @@ with DAG(
     start_date=datetime(2024, 1, 1, tzinfo=timezone.utc),
     catchup=False,
     max_active_runs=1,
-    tags=["crypto", "cmc", "top30", "mapping", "point-in-time"],
+    tags=[
+        "crypto",
+        "cmc",
+        "top30",
+        "top50",
+        "mapping",
+        "point-in-time",
+    ],
 ) as dag:
 
     @task
@@ -191,6 +216,7 @@ with DAG(
                 conn,
                 run_table=DB_CFG["run_table"],
                 snapshot_table=DB_CFG["snapshot_table"],
+                expected_row_count=TOP_N,
                 default_data_start_at=_configured_data_start(),
                 stablecoin_overrides=(
                     CLASSIFICATION_CFG.get("stablecoin_overrides") or {}
@@ -210,7 +236,7 @@ with DAG(
             conn.close()
 
         if not targets:
-            raise RuntimeError("No complete CMC Top 30 snapshots are available")
+            raise RuntimeError("No complete CMC Top 50 snapshots are available")
 
         needs_market_data = [
             target
@@ -254,7 +280,7 @@ with DAG(
             status = str(record["mapping_status"])
             statuses[status] = statuses.get(status, 0) + 1
         logging.info(
-            "CMC Top 30 symbol mapping summary: targets=%s statuses=%s",
+            "CMC Top 50 symbol mapping summary: targets=%s statuses=%s",
             len(records),
             statuses,
         )
@@ -266,14 +292,17 @@ with DAG(
 
     mapping_summary = sync_symbol_targets()
 
-    if DOWNSTREAM_CFG.get("trigger_backfill", True):
-        trigger_backfill = TriggerDagRunOperator(
-            task_id="trigger_delta_backfill",
-            trigger_dag_id=DOWNSTREAM_CFG.get(
-                "backfill_dag_id", "backfill_cmc_top30_historical_data_dag"
-            ),
-            conf={"mode": "missing_only", "triggered_by_mapping": True},
-            wait_for_completion=False,
-            reset_dag_run=False,
-        )
-        mapping_summary >> trigger_backfill
+    backfill_gate = ShortCircuitOperator(
+        task_id="check_trigger_delta_backfill",
+        python_callable=_should_trigger_backfill,
+    )
+    trigger_backfill = TriggerDagRunOperator(
+        task_id="trigger_delta_backfill",
+        trigger_dag_id=DOWNSTREAM_CFG.get(
+            "backfill_dag_id", "backfill_cmc_top30_historical_data_dag"
+        ),
+        conf={"mode": "missing_only", "triggered_by_mapping": True},
+        wait_for_completion=False,
+        reset_dag_run=False,
+    )
+    mapping_summary >> backfill_gate >> trigger_backfill

@@ -9,7 +9,7 @@ from typing import Any, Dict, List, Mapping, Optional
 
 
 UTC = timezone.utc
-TOP_N = 30
+TOP_N = 50
 SOURCE_PUBLICATION_DELAY = timedelta(minutes=30)
 
 
