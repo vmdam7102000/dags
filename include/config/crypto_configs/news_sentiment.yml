@@ -1,0 +1,13 @@
+crypto_news:
+  postgres_conn_id: keynum-central-pg
+  schedule: "0 2 * * *"
+  google_api_key_var: google_custom_search_api_key
+  google_cx_var: google_custom_search_engine_id
+  openrouter_api_key_var: openrouter_apikey
+  model: google/gemini-2.5-flash-lite
+  classifier_version: coin-context-v1
+  report_version: coin-report-v1
+  score_version: published-count-v1
+  max_results_per_coin: 100
+  request_timeout_seconds: 30
+  retention_days: 90
