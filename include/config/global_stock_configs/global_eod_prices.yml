@@ -10,7 +10,7 @@ global_eod_prices:
     throttle_seconds: 1
 
   adjusted_refresh:
-    schedule_interval: "30 3 * * 0"
+    schedule_interval: "30 3 L * *"  # 03:30 UTC on the last calendar day of each month
     lookback_days: 10000
 
   db:

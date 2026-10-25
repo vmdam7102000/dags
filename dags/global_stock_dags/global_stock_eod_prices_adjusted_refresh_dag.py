@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import logging
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, List
 
 from airflow import DAG
@@ -9,9 +9,10 @@ from airflow.decorators import task
 from airflow.models import Variable
 from airflow.operators.python import get_current_context
 from airflow.providers.postgres.hooks.postgres import PostgresHook
+from airflow.timetables.interval import CronDataIntervalTimetable
 
 from plugins.utils.config_loader import load_yaml_config
-from plugins.utils.eod_price_sync import sync_global_eod_one
+from plugins.utils.eod_price_sync import get_adjusted_refresh_date, sync_global_eod_one
 
 CONFIG = load_yaml_config("global_stock_configs/global_eod_prices.yml")["global_eod_prices"]
 API_CFG = CONFIG["api"]
@@ -19,23 +20,26 @@ REFRESH_CFG = CONFIG["adjusted_refresh"]
 DB_CFG = CONFIG["db"]
 CHUNK_SIZE = 400
 API_KEY = Variable.get(API_CFG["api_key_var"], default_var="")
+EODHD_POOL = Variable.get("eodhd_airflow_pool", default_var="default_pool")
 ADJUSTED_UPDATE_COLUMNS = ("adjusted_close",)
 
 
 with DAG(
-    dag_id="refresh_global_eod_stock_adjusted_prices_weekly_dag",
-    description="Weekly full refresh of global-stock adjusted close prices from EODHD",
+    dag_id="refresh_global_eod_stock_adjusted_prices_monthly_dag",
+    description="Month-end refresh of 10,000 days of global-stock adjusted close prices from EODHD",
     default_args={
         "owner": "global-stock-data",
         "depends_on_past": False,
         "retries": 2,
         "retry_delay": timedelta(minutes=5),
     },
-    schedule_interval=REFRESH_CFG["schedule_interval"],
-    start_date=datetime(2024, 1, 1),
+    schedule=CronDataIntervalTimetable(REFRESH_CFG["schedule_interval"], timezone="UTC"),
+    # The first complete interval ends on 2026-10-31 at 03:30 UTC.
+    start_date=datetime(2026, 9, 30, 3, 30, tzinfo=timezone.utc),
     catchup=False,
     max_active_runs=1,
-    tags=["stock", "global", "eod", "eodhd", "adjusted-refresh"],
+    is_paused_upon_creation=True,
+    tags=["stock", "global", "eod", "eodhd", "adjusted-refresh", "monthly"],
 ) as dag:
 
     @task
@@ -62,9 +66,10 @@ with DAG(
     def chunk_companies(companies: List[Dict[str, Any]]) -> List[List[Dict[str, Any]]]:
         return [companies[index : index + CHUNK_SIZE] for index in range(0, len(companies), CHUNK_SIZE)]
 
-    @task
+    @task(pool=EODHD_POOL)
     def refresh_company_batch(companies: List[Dict[str, Any]]) -> None:
-        logical_date = get_current_context()["logical_date"]
+        refresh_date = get_adjusted_refresh_date(get_current_context())
+        logging.info("Refreshing %s companies as of %s", len(companies), refresh_date)
         hook = PostgresHook(postgres_conn_id=DB_CFG["postgres_conn_id"])
         conn = hook.get_conn()
         try:
@@ -76,7 +81,7 @@ with DAG(
                 sync_global_eod_one(
                     ticker=ticker,
                     company_id=company_id,
-                    logical_date=logical_date,
+                    logical_date=refresh_date,
                     lookback_days=REFRESH_CFG["lookback_days"],
                     api_cfg=API_CFG,
                     db_cfg=DB_CFG,

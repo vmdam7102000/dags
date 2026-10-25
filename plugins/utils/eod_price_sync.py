@@ -2,14 +2,23 @@ from __future__ import annotations
 
 import logging
 import time
-from datetime import datetime, timedelta
-from typing import Any, Dict, List, Sequence, TYPE_CHECKING
+from datetime import datetime, timedelta, timezone
+from typing import Any, Dict, List, Mapping, Sequence, TYPE_CHECKING
 
 if TYPE_CHECKING:
     from psycopg2.extensions import connection as PGConnection
 
 from plugins.utils.api_utils import request_json
 from plugins.utils.db_utils import insert_dynamic_records
+
+
+def get_adjusted_refresh_date(context: Mapping[str, Any]) -> datetime:
+    """Keep scheduled/manual refresh cutoffs stable across retries, in UTC."""
+    if context["dag_run"].run_type == "manual":
+        reference_date = context["logical_date"]
+    else:
+        reference_date = context["data_interval_end"]
+    return reference_date.astimezone(timezone.utc)
 
 
 def build_date_range(
@@ -60,8 +69,9 @@ def sync_global_eod_one(
     api_key: str,
     update_columns: Sequence[str],
     conn: PGConnection,
+    provider_ticker: str | None = None,
 ) -> None:
-    """Fetch and upsert one global-stock EOD history range."""
+    """Fetch EODHD history using the provider symbol and store the source ticker."""
     date_range = build_date_range(
         logical_date=logical_date,
         lookback_days=lookback_days,
@@ -73,7 +83,7 @@ def sync_global_eod_one(
         params["api_token"] = api_key
 
     payload = request_json(
-        api_cfg["url"].format(ticker=ticker),
+        api_cfg["url"].format(ticker=provider_ticker or ticker),
         params=params,
         timeout=api_cfg.get("timeout", 30),
     )
@@ -98,7 +108,10 @@ def sync_global_eod_one(
         update_columns=update_columns,
         conn=conn,
     )
-    logging.info("Processed %s EOD records for %s", len(enriched), ticker)
+    logging.info(
+        "Processed %s EOD records for %s, from %s to %s",
+        len(enriched), ticker, *date_range.values(),
+    )
     time.sleep(api_cfg.get("throttle_seconds", 1))
 
 

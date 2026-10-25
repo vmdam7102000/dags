@@ -11,6 +11,10 @@ sp500_eod_prices:
     empty_response_attempts: 3
     empty_response_backoff_seconds: 2
 
+  adjusted_refresh:
+    schedule_interval: "30 3 L * *"  # 03:30 UTC on the last calendar day of each month
+    lookback_days: 10000
+
   db:
     postgres_conn_id: "keynum-central-pg"
     company_table: "raw_sp500_stock_data.companies"
